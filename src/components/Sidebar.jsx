@@ -1,12 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, User, LayoutDashboard, Clock, Crown, LogOut, Image as ImageIcon } from 'lucide-react';
+import { Menu, X, User, LayoutDashboard, Clock, Crown, LogOut, Image as ImageIcon, Plus } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
 const Sidebar = ({ children }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      if (!isSupabaseConfigured()) {
+        setIsAdmin(true); // Mock admin for testing
+        return;
+      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session && session.user.email === 'kmatrixstudio@gmail.com') {
+        setIsAdmin(true);
+      }
+    };
+    checkAdmin();
+  }, []);
 
   const toggleSidebar = () => setIsOpen(!isOpen);
 
@@ -21,6 +36,7 @@ const Sidebar = ({ children }) => {
     { name: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
     { name: 'Account', icon: <User size={20} />, path: '/profile' },
     { name: 'History', icon: <Clock size={20} />, path: '/history' },
+    ...(isAdmin ? [{ name: 'Media', icon: <Plus size={20} />, path: '/admin' }] : []),
     { name: 'Go Premium', icon: <Crown size={20} color="#FFD700" />, path: '/premium' },
   ];
 
@@ -39,7 +55,7 @@ const Sidebar = ({ children }) => {
         </button>
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginLeft: '1rem', fontSize: '1.25rem', fontWeight: 'bold' }}>
           <ImageIcon color="var(--text-main)" size={24} />
-          <span>ImDeo</span>
+          <span>Promptora</span>
         </Link>
       </div>
 
@@ -65,7 +81,7 @@ const Sidebar = ({ children }) => {
         <div style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontWeight: 'bold', fontSize: '1.25rem' }}>
             <ImageIcon color="var(--text-main)" size={24} />
-            <span>ImDeo</span>
+            <span>Promptora</span>
           </div>
           <button className="btn-icon" onClick={toggleSidebar}>
             <X size={24} />

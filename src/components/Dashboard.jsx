@@ -1,44 +1,95 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MediaCard from './MediaCard';
-import { Upload, Search, X, Loader2 } from 'lucide-react';
+import { Plus, Search, X, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
-const DashboardSection = ({ title, media, onMediaClick, onUpload, isAdmin, onEdit, onDelete }) => (
-  <div style={{ marginBottom: '3rem' }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-      <h2 style={{ fontSize: '1.5rem', fontWeight: '600' }}>{title}</h2>
-      {isAdmin && (
-        <button onClick={() => onUpload(title.toLowerCase())} className="btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}>
-          <Upload size={16} /> Upload
-        </button>
+/* ─── Scrollable Section ────────────────────────────── */
+const DashboardSection = ({ title, media, onMediaClick, isAdmin, onEdit, onDelete }) => {
+  const scrollRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollButtons = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  };
+
+  useEffect(() => {
+    updateScrollButtons();
+    const el = scrollRef.current;
+    if (el) el.addEventListener('scroll', updateScrollButtons, { passive: true });
+    window.addEventListener('resize', updateScrollButtons);
+    return () => {
+      if (el) el.removeEventListener('scroll', updateScrollButtons);
+      window.removeEventListener('resize', updateScrollButtons);
+    };
+  }, [media]);
+
+  const scroll = (dir) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const cardWidth = el.querySelector('.media-thumbnail')?.offsetWidth || 220;
+    el.scrollBy({ left: dir * (cardWidth + 16) * 2, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="dashboard-section" style={{ marginBottom: '2.5rem' }}>
+      {/* Section header */}
+      <div className="section-divider">
+        <h2>{title}</h2>
+        <span className="section-count">{media.length}</span>
+      </div>
+
+      {media.length === 0 ? (
+        <div
+          className="glass-panel"
+          style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.92rem' }}
+        >
+          No {title.toLowerCase()} found yet.
+        </div>
+      ) : (
+        <div className="scroll-section-wrap">
+          {/* Left arrow */}
+          {canScrollLeft && (
+            <button className="scroll-arrow scroll-arrow-left" onClick={() => scroll(-1)} aria-label="Scroll left">
+              <ChevronLeft size={20} />
+            </button>
+          )}
+
+          {/* Scrollable row */}
+          <div className="scroll-row" ref={scrollRef}>
+            {media.map((item, idx) => (
+              <div className="scroll-card" key={item.id} style={{ animationDelay: `${idx * 0.05}s` }}>
+                <MediaCard
+                  item={item}
+                  onClick={onMediaClick}
+                  isAdmin={isAdmin}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Right arrow */}
+          {canScrollRight && (
+            <button className="scroll-arrow scroll-arrow-right" onClick={() => scroll(1)} aria-label="Scroll right">
+              <ChevronRight size={20} />
+            </button>
+          )}
+        </div>
       )}
     </div>
-    
-    {media.length === 0 ? (
-      <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-        No {title.toLowerCase()} found.
-      </div>
-    ) : (
-      <div className="dashboard-grid">
-        {media.map((item) => (
-          <MediaCard 
-            key={item.id} 
-            item={item} 
-            onClick={onMediaClick} 
-            isAdmin={isAdmin} 
-            onEdit={onEdit} 
-            onDelete={onDelete} 
-          />
-        ))}
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
+/* ─── Dashboard ─────────────────────────────────────── */
 const Dashboard = ({ media, onMediaClick, onRefresh }) => {
-  const [search, setSearch] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [search, setSearch]     = useState('');
+  const [isAdmin, setIsAdmin]   = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const navigate = useNavigate();
@@ -57,38 +108,33 @@ const Dashboard = ({ media, onMediaClick, onRefresh }) => {
     checkAdmin();
   }, []);
 
-  const handleUploadClick = (type) => {
-    navigate('/admin', { state: { preselectType: type } });
-  };
-
+  /* ── Delete ── */
   const handleDelete = async (item) => {
-    if (window.confirm('Are you sure you want to delete this media?')) {
-      if (!isSupabaseConfigured()) {
-        alert('Mock delete successful. Configure Supabase to persist changes.');
-        if (onRefresh) onRefresh();
-        return;
-      }
-      
-      try {
-        // Delete from database
-        const { error: dbError } = await supabase.from('media').delete().eq('id', item.id);
-        if (dbError) throw dbError;
+    if (!window.confirm('Are you sure you want to delete this media?')) return;
 
-        // Delete from storage if URL contains imdeo-media
-        if (item.url.includes('imdeo-media')) {
-          const path = item.url.split('/').pop();
-          const { error: storageError } = await supabase.storage.from('imdeo-media').remove([path]);
-          if (storageError) console.warn('Could not delete from storage:', storageError);
-        }
+    if (!isSupabaseConfigured()) {
+      alert('Mock delete successful. Configure Supabase to persist changes.');
+      if (onRefresh) onRefresh();
+      return;
+    }
 
-        if (onRefresh) onRefresh();
-      } catch (error) {
-        console.error('Error deleting:', error);
-        alert('Failed to delete: ' + error.message);
+    try {
+      const { error: dbError } = await supabase.from('media').delete().eq('id', item.id);
+      if (dbError) throw dbError;
+
+      if (item.url && item.url.includes('imdeo-media')) {
+        const path = item.url.split('/').pop();
+        await supabase.storage.from('imdeo-media').remove([path]);
       }
+
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error('Error deleting:', error);
+      alert('Failed to delete: ' + error.message);
     }
   };
 
+  /* ── Edit save ── */
   const handleEditSave = async (e) => {
     e.preventDefault();
     setIsSaving(true);
@@ -97,21 +143,20 @@ const Dashboard = ({ media, onMediaClick, onRefresh }) => {
       setTimeout(() => {
         setIsSaving(false);
         setEditItem(null);
-        alert('Mock save successful. Configure Supabase to persist changes.');
+        alert('Mock save successful.');
         if (onRefresh) onRefresh();
-      }, 1000);
+      }, 800);
       return;
     }
 
     try {
       const { error } = await supabase.from('media').update({
-        title: editItem.title,
-        prompt: editItem.prompt,
-        category: editItem.category
+        title:    editItem.title,
+        prompt:   editItem.prompt,
+        category: editItem.category,
       }).eq('id', editItem.id);
 
       if (error) throw error;
-      
       setEditItem(null);
       if (onRefresh) onRefresh();
     } catch (error) {
@@ -122,11 +167,13 @@ const Dashboard = ({ media, onMediaClick, onRefresh }) => {
     }
   };
 
-  const filteredMedia = media.filter(item => 
-    !search || 
-    (item.prompt && item.prompt.toLowerCase().includes(search.toLowerCase())) ||
-    (item.category && item.category.toLowerCase().includes(search.toLowerCase())) ||
-    (item.title && item.title.toLowerCase().includes(search.toLowerCase()))
+  /* ── Filter ── */
+  const q = search.toLowerCase();
+  const filteredMedia = media.filter(item =>
+    !q ||
+    (item.prompt   && item.prompt.toLowerCase().includes(q))   ||
+    (item.category && item.category.toLowerCase().includes(q)) ||
+    (item.title    && item.title.toLowerCase().includes(q))
   );
 
   const images = filteredMedia.filter(m => m.type === 'image');
@@ -134,91 +181,90 @@ const Dashboard = ({ media, onMediaClick, onRefresh }) => {
   const guides = filteredMedia.filter(m => m.type === 'guide');
 
   return (
-    <div className="container" style={{ padding: '2rem 1rem', position: 'relative' }}>
-      {/* Search Bar */}
-      <div style={{ position: 'relative', marginBottom: '3rem', maxWidth: '600px', margin: '0 auto 3rem auto' }}>
-        <Search style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={20} />
-        <input 
-          type="text" 
-          placeholder="Search titles, prompts, categories..." 
+    <div className="container page-enter" style={{ padding: '2rem 1.5rem', position: 'relative' }}>
+
+      {/* ── Search ── */}
+      <div className="search-bar-wrap">
+        <Search
+          size={18}
+          style={{
+            position: 'absolute', left: '1.15rem', top: '50%',
+            transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none',
+          }}
+        />
+        <input
+          type="text"
+          placeholder="Search titles, prompts, categories…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ paddingLeft: '3rem', margin: 0, borderRadius: '50px' }}
+          className="search-input"
         />
+        {search && (
+          <button
+            className="btn-icon"
+            onClick={() => setSearch('')}
+            style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)' }}
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
 
-      <DashboardSection 
-        title="Images" 
-        media={images} 
-        onMediaClick={onMediaClick} 
-        onUpload={handleUploadClick}
-        isAdmin={isAdmin}
-        onEdit={setEditItem}
-        onDelete={handleDelete}
-      />
-      
-      <DashboardSection 
-        title="Videos" 
-        media={videos} 
-        onMediaClick={onMediaClick} 
-        onUpload={handleUploadClick}
-        isAdmin={isAdmin}
-        onEdit={setEditItem}
-        onDelete={handleDelete}
-      />
+      {/* ── Sections ── */}
+      <DashboardSection title="Images" media={images} onMediaClick={onMediaClick} isAdmin={isAdmin} onEdit={setEditItem} onDelete={handleDelete} />
+      <DashboardSection title="Videos" media={videos} onMediaClick={onMediaClick} isAdmin={isAdmin} onEdit={setEditItem} onDelete={handleDelete} />
+      <DashboardSection title="Guides" media={guides} onMediaClick={onMediaClick} isAdmin={isAdmin} onEdit={setEditItem} onDelete={handleDelete} />
 
-      <DashboardSection 
-        title="Guides" 
-        media={guides} 
-        onMediaClick={onMediaClick} 
-        onUpload={handleUploadClick}
-        isAdmin={isAdmin}
-        onEdit={setEditItem}
-        onDelete={handleDelete}
-      />
+      {/* ── Floating + button — ADMIN ONLY ── */}
+      {isAdmin && (
+        <button
+          className="fab"
+          onClick={() => navigate('/admin')}
+          aria-label="Upload new media"
+        >
+          <span className="fab-tooltip">Upload Media</span>
+          <Plus size={26} strokeWidth={2.5} />
+        </button>
+      )}
 
-      {/* Edit Modal */}
+      {/* ── Edit Modal ── */}
       {editItem && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'var(--overlay-bg)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease'
-        }}>
-          <div className="glass-panel" style={{ width: '90%', maxWidth: '500px', padding: '2rem', position: 'relative' }}>
-            <button className="btn-icon" onClick={() => setEditItem(null)} style={{ position: 'absolute', top: '1rem', right: '1rem' }}>
-              <X size={24} />
+        <div
+          className="lightbox-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setEditItem(null); }}
+        >
+          <div
+            className="glass-panel"
+            style={{ width: '90%', maxWidth: '500px', padding: '2rem', position: 'relative', animation: 'scaleIn 0.25s ease both' }}
+          >
+            <button
+              className="btn-icon"
+              onClick={() => setEditItem(null)}
+              style={{ position: 'absolute', top: '1rem', right: '1rem' }}
+            >
+              <X size={22} />
             </button>
-            <h2 style={{ marginBottom: '1.5rem' }}>Edit Media</h2>
-            
+            <h2 style={{ marginBottom: '1.5rem', fontSize: '1.3rem' }}>Edit Media</h2>
+
             <form onSubmit={handleEditSave}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Title</label>
-                <input 
-                  type="text" 
-                  value={editItem.title || ''} 
-                  onChange={e => setEditItem({...editItem, title: e.target.value})} 
-                />
+              <div style={{ marginBottom: '0.25rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: '600', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Title</label>
+                <input type="text" value={editItem.title || ''} onChange={e => setEditItem({ ...editItem, title: e.target.value })} />
               </div>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Category</label>
-                <select value={editItem.category || ''} onChange={e => setEditItem({...editItem, category: e.target.value})}>
+              <div style={{ marginBottom: '0.25rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: '600', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Category</label>
+                <select value={editItem.category || ''} onChange={e => setEditItem({ ...editItem, category: e.target.value })}>
                   <option value="Image">Image</option>
                   <option value="Video">Video</option>
                   <option value="Guide">Guide</option>
-                  <option value="Nature">Nature</option>
-                  <option value="Cyberpunk">Cyberpunk</option>
-                  <option value="Portrait">Portrait</option>
                 </select>
               </div>
-              <div style={{ marginBottom: '2rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Prompt</label>
-                <textarea 
-                  value={editItem.prompt || ''} 
-                  onChange={e => setEditItem({...editItem, prompt: e.target.value})} 
-                  rows={4}
-                />
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: '600', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Prompt</label>
+                <textarea value={editItem.prompt || ''} onChange={e => setEditItem({ ...editItem, prompt: e.target.value })} rows={4} />
               </div>
               <button type="submit" className="btn-primary" style={{ width: '100%' }} disabled={isSaving}>
-                {isSaving ? <><Loader2 className="animate-spin" size={18} /> Saving...</> : 'Save Changes'}
+                {isSaving ? <><Loader2 className="animate-spin" size={17} /> Saving…</> : 'Save Changes'}
               </button>
             </form>
           </div>

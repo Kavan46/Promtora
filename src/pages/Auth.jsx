@@ -106,7 +106,7 @@ const Auth = () => {
                 onClick={() => setShowPassword(!showPassword)}
                 style={{ 
                   position: 'absolute', right: '0.75rem', top: '50%', 
-                  transform: 'translateY(-50%)', color: '#000' 
+                  transform: 'translateY(-50%)', color: 'var(--text-muted)' 
                 }}
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
