@@ -99,6 +99,7 @@ const Premium = () => {
           
           setIsPremium(true);
           alert("Payment successful! Premium activated.");
+          window.location.href = "https://promptora.beauty";
         } catch (error) {
           console.error("Error saving subscription:", error);
           alert("Payment succeeded but failed to update database. Please contact support.");
