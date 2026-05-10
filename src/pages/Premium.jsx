@@ -77,51 +77,72 @@ const Premium = () => {
 
     setProcessing(true);
 
-    const options = {
-      key: keyId,
-      amount: 19900, // ₹199 in paise
-      currency: "INR",
-      name: "Promptora Premium",
-      description: "Monthly Premium Subscription",
-      handler: async function (response) {
-        try {
-          // Save subscription in Supabase
-          const expiresAt = new Date();
-          expiresAt.setMonth(expiresAt.getMonth() + 1);
+    try {
+      // 1. Create order on backend
+      const orderRes = await fetch('/api/create-order', {
+        method: 'POST',
+      });
+      if (!orderRes.ok) throw new Error("Failed to create order");
+      const order = await orderRes.json();
 
-          const { error } = await supabase.from('user_subscriptions').insert({
-            user_id: user.id,
-            is_premium: true,
-            expires_at: expiresAt.toISOString()
-          });
+      const options = {
+        key: keyId,
+        amount: order.amount,
+        currency: order.currency,
+        order_id: order.id,
+        name: "Promptora Premium",
+        description: "Monthly Premium Subscription",
+        handler: async function (response) {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            
+            // 2. Verify payment on backend and update Supabase
+            const verifyRes = await fetch('/api/verify-payment', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`
+              },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                user_id: user.id
+              })
+            });
 
-          if (error) throw error;
-          
-          setIsPremium(true);
-          alert("Payment successful! Premium activated.");
-          window.location.href = "https://promptora.beauty";
-        } catch (error) {
-          console.error("Error saving subscription:", error);
-          alert("Payment succeeded but failed to update database. Please contact support.");
-        } finally {
-          setProcessing(false);
+            if (!verifyRes.ok) throw new Error("Payment verification failed");
+
+            setIsPremium(true);
+            alert("Payment successful! Premium activated.");
+            window.location.href = "https://promptora.beauty";
+          } catch (error) {
+            console.error("Error verifying payment:", error);
+            alert("Payment succeeded but verification failed. Please contact support.");
+          } finally {
+            setProcessing(false);
+          }
+        },
+        prefill: {
+          email: user.email
+        },
+        theme: {
+          color: "#2F2FE4"
+        },
+        modal: {
+          ondismiss: function() {
+            setProcessing(false);
+          }
         }
-      },
-      prefill: {
-        email: user.email
-      },
-      theme: {
-        color: "#2F2FE4"
-      },
-      modal: {
-        ondismiss: function() {
-          setProcessing(false);
-        }
-      }
-    };
-    
-    const rzp = new window.Razorpay(options);
-    rzp.open();
+      };
+      
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (error) {
+      console.error("Payment initiation failed:", error);
+      alert("Failed to initiate payment. Please try again.");
+      setProcessing(false);
+    }
   };
 
   if (loading) {
