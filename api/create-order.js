@@ -6,9 +6,18 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Attempting to retrieve Razorpay keys using various common environment variable names
+    const razorpayKeyId = process.env.VITE_RAZORPAY_KEY_ID || process.env.RAZORPAYKEY_ID || process.env.RAZORPAYKEYID || process.env.RAZORPAY_KEY_ID;
+    const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAYKEY_SECRET || process.env.RAZORPAYKEYSECRET || process.env.RAZORPAY_SECRET;
+
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      console.error("Missing Razorpay Keys in Environment Variables");
+      return res.status(500).json({ message: 'Razorpay keys are missing on the server.' });
+    }
+
     const instance = new Razorpay({
-      key_id: process.env.VITE_RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET,
+      key_id: razorpayKeyId,
+      key_secret: razorpayKeySecret,
     });
 
     const options = {

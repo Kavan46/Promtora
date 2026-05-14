@@ -35,7 +35,7 @@ const Premium = () => {
 
       // Check if user is already premium
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('user_subscriptions')
           .select('*')
           .eq('user_id', session.user.id)
@@ -69,9 +69,9 @@ const Premium = () => {
       return;
     }
 
-    const keyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
+    const keyId = import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITERAZORPAYKEY_ID || import.meta.env.RAZORPAYKEY_ID || import.meta.env.VITE_RAZORPAYKEYID;
     if (!keyId) {
-      alert("Razorpay Key ID is missing! Please add VITE_RAZORPAY_KEY_ID to your .env.local file.");
+      alert("Razorpay Key ID is missing! Please add VITE_RAZORPAY_KEY_ID to your .env.local file or Vercel Environment Variables.");
       return;
     }
 

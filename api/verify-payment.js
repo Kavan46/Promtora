@@ -14,7 +14,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const secret = process.env.RAZORPAY_KEY_SECRET;
+    const secret = process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAYKEY_SECRET || process.env.RAZORPAYKEYSECRET || process.env.RAZORPAY_SECRET;
+    
+    if (!secret) {
+      console.error("Missing Razorpay Secret in Environment Variables");
+      return res.status(500).json({ message: 'Razorpay secret is missing on the server.' });
+    }
     
     // Create HMAC signature
     const shasum = crypto.createHmac('sha256', secret);
